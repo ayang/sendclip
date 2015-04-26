@@ -9,11 +9,9 @@
 ClipboardManager::ClipboardManager(QObject *parent) : QObject(parent)
 {
     udpSocket = NULL;
-    settingsDialog = new SettingsDialog();
-    connect(settingsDialog, &SettingsDialog::accepted, this, &ClipboardManager::reload);
     QSettings settings;
     if (settings.value("username", "").toString().length() == 0)
-        settingsDialog->show();
+        showSettingsDialog();
     reload();
 }
 
@@ -116,7 +114,10 @@ void ClipboardManager::reciveData()
 
 void ClipboardManager::showSettingsDialog()
 {
-    settingsDialog->show();
+    SettingsDialog dlg;
+    if(dlg.exec() == QDialog::Accepted) {
+        reload();
+    }
 }
 
 void ClipboardManager::reload()
@@ -143,7 +144,7 @@ void ClipboardManager::quit()
 void ClipboardManager::iconActivated(QSystemTrayIcon::ActivationReason reason)
 {
     switch (reason) {
-    case QSystemTrayIcon::Trigger:
+    case QSystemTrayIcon::DoubleClick:
         sendClipboard();
         break;
     default:
