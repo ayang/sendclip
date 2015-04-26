@@ -144,7 +144,7 @@ void ClipboardManager::quit()
 void ClipboardManager::iconActivated(QSystemTrayIcon::ActivationReason reason)
 {
     switch (reason) {
-    case QSystemTrayIcon::DoubleClick:
+    case QSystemTrayIcon::Trigger:
         sendClipboard();
         break;
     default:
