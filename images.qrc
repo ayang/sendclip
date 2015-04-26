@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="systray.png">images/systray.png</file>
+    </qresource>
+</RCC>
