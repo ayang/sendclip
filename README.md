@@ -1,10 +1,12 @@
 # sendclip
-Send clipboard contents to other devices in lan
+Send clipboard contents to other devices in lan. It can send text and screenshort from clipboard to other machines that installed sendclip too. 
 
 I do my jobs on two computers, an ubuntu and a macbookpro. Many times when I need to send clipboard contents from one to another, I found there is no proper tool. So I made this. It may be can work on windows, but not tested yet.
 
 ## compile
-To compile the project only need to install qt5.
+* To compile the project, qt5 is needed.
+* Download [qhttpserver](https://github.com/nikhilm/qhttpserver) into parant directory of this project and make it (make install is unnecessary).
+* Compile it.
 
 ## install
 I have not made any binary to be downloaded, so, download the code and compile it.
