@@ -6,6 +6,10 @@
 
 class SettingsDialog;
 class QUdpSocket;
+class QHttpRequest;
+class QHttpResponse;
+class QNetworkAccessManager;
+class QNetworkReply;
 
 class ClipboardManager : public QObject
 {
@@ -24,6 +28,9 @@ public slots:
     void iconActivated(QSystemTrayIcon::ActivationReason reason);
     void createTrayIcon();
     void reload();
+    void handleHttp(QHttpRequest *req, QHttpResponse *resp);
+    void getTextFinish();
+    void getImageFinish();
 
 private:
     void createTrayMenu();
@@ -44,6 +51,8 @@ private:
     QString username;
     QString key;
     QByteArray buffer;
+    QNetworkAccessManager *nmg;
+    QNetworkReply *textReply, *imageReply;
 };
 
 #endif // CLIPBOARDMANAGER_H

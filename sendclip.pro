@@ -35,3 +35,11 @@ DISTFILES += \
 QMAKE_INFO_PLIST = Info.plist
 ICON = images/main.icns
 RC_FILE = sendclip.rc
+
+# qhttpserver
+win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../qhttpserver/lib/release/ -lqhttpserver
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../qhttpserver/lib/debug/ -lqhttpserver
+else:unix: LIBS += -L$$PWD/../qhttpserver/lib/ -lqhttpserver
+
+INCLUDEPATH += $$PWD/../qhttpserver/src
+DEPENDPATH += $$PWD/../qhttpserver/src

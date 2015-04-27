@@ -4,11 +4,14 @@
 #include <QApplication>
 #include <QtWidgets>
 #include <QtNetwork/QtNetwork>
-#include <iostream>
+#include <qhttpserver.h>
+#include <qhttprequest.h>
+#include <qhttpresponse.h>
 
 ClipboardManager::ClipboardManager(QObject *parent) : QObject(parent)
 {
     udpSocket = NULL;
+    nmg = new QNetworkAccessManager;
     QSettings settings;
     if (settings.value("username", "").toString().length() == 0)
         showSettingsDialog();
@@ -51,30 +54,19 @@ void ClipboardManager::createTrayMenu()
 void ClipboardManager::sendClipboard()
 {
     QClipboard *clipboard = QGuiApplication::clipboard();
-
-    QByteArray originText = clipboard->text().toUtf8();
-    QEncryptRc4 rc4;
-    rc4.UseKey(key);
-    QByteArray text;
-    rc4.Encrypt(originText, text);
+    QByteArray data;
+    QDataStream out(&data, QIODevice::WriteOnly);
+    out << username << QHostInfo::localHostName();
+    QStringList typeList;
+    if (clipboard->text().length())
+        typeList.append("text");
+    if (!clipboard->image().isNull())
+        typeList.append("image");
+    QString typeText = typeList.join(',');
+    out << typeText;
 
     foreach (QString address, sendAddress) {
-        int length = text.length();
-        int start = 0;
-        int chunk_size = 480;
-        short int i = 0;
-        while (start < length) {
-            short int last = 0;
-            if (start + chunk_size >= length) {
-                last = 1;
-            }
-            QByteArray data;
-            QDataStream out(&data, QIODevice::WriteOnly);
-            out << username << QHostInfo::localHostName() << i << last << text.mid(start, chunk_size);
-            udpSocket->writeDatagram(data, QHostAddress(address), port);
-            start += chunk_size;
-            i++;
-        }
+        udpSocket->writeDatagram(data, QHostAddress(address), port);
     }
 }
 
@@ -82,34 +74,107 @@ void ClipboardManager::reciveData()
 {
     while (udpSocket->hasPendingDatagrams()) {
         QByteArray datagram;
+        QHostAddress peerAddress;
+        quint16 peerPort;
         datagram.resize(udpSocket->pendingDatagramSize());
-        udpSocket->readDatagram(datagram.data(), datagram.size());
+        udpSocket->readDatagram(datagram.data(), datagram.size(), &peerAddress, &peerPort);
         QDataStream in(&datagram, QIODevice::ReadOnly);
         QString toUsername, hostname;
-        QByteArray text;
-        short int i;
-        short int last;
-        in >> toUsername >> hostname >> i >> last >> text;
+        QString typeText;
+        in >> toUsername >> hostname >> typeText;
         if (toUsername != username)
             continue;
         if (hostname == QHostInfo::localHostName())
             continue;
 
-        if (i == 0) {
-            buffer.clear();
-        }
-        buffer.append(text);
-
-        if (last) {
-            QByteArray originText;
-            QEncryptRc4 rc4;
-            rc4.UseKey(key);
-            rc4.Encrypt(buffer, originText);
-
-            QClipboard *clipboard = QGuiApplication::clipboard();
-            clipboard->setText(QString::fromUtf8(originText));
+        foreach (QString type, typeText.split(',')) {
+            if (type == "text") {
+                QString url = QString("http://%1:%2/clipboard/text").arg(peerAddress.toString()).arg(port);
+                textReply = nmg->get(QNetworkRequest(url));
+                connect(textReply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
+            }
+            else if (type == "image") {
+                QString url = QString("http://%1:%2/clipboard/image").arg(peerAddress.toString()).arg(port);
+                imageReply = nmg->get(QNetworkRequest(url));
+                connect(imageReply, &QNetworkReply::finished, this, &ClipboardManager::getImageFinish);
+            }
         }
     }
+}
+
+void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
+{
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    QEncryptRc4 rc4;
+    rc4.UseKey(key);
+    qDebug() << req->path();
+    if (req->path() == "/clipboard/text") {
+        resp->writeHead(200);
+        resp->setHeader("Content-Type", "text/encrypted-plain");
+
+        QByteArray text = clipboard->text().toUtf8();
+        QByteArray data;
+        rc4.Encrypt(text, data);
+        resp->write(data);
+    }
+    else if (req->path() == "/clipboard/image") {
+        resp->writeHead(200);
+        resp->setHeader("Content-Type", "image/encrypted-png");
+
+        QImage image = clipboard->image();
+        qDebug() << "send image: " << image.width() << image.height();
+
+        QByteArray imageData;
+        QBuffer buf(&imageData);
+        buf.open(QIODevice::WriteOnly);
+        image.save(&buf, "PNG");
+        buf.close();
+        qDebug() << "imagedata size:" << imageData.size();
+        QByteArray data;
+        rc4.Encrypt(imageData, data);
+//        data = imageData;
+        resp->write(data);
+    }
+    else {
+        resp->writeHead(404);
+    }
+    resp->end();
+}
+
+void ClipboardManager::getTextFinish()
+{
+    if (!textReply->error()) {
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        QByteArray data = textReply->readAll();
+        QByteArray text;
+        QEncryptRc4 rc4;
+        rc4.UseKey(key);
+        rc4.Encrypt(data, text);
+        clipboard->setText(QString::fromUtf8(text));
+    } else {
+        qDebug() << textReply->errorString();
+    }
+    textReply->deleteLater();
+}
+
+void ClipboardManager::getImageFinish()
+{
+    qDebug() << "recived image clipboard";
+    if (!imageReply->error()) {
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        QByteArray data = imageReply->readAll();
+        QByteArray imageData;
+        QEncryptRc4 rc4;
+        rc4.UseKey(key);
+        rc4.Encrypt(data, imageData);
+//        imageData = data;
+        QImage image = QImage::fromData(imageData);
+        qDebug() << "recived image: " << image.width() << image.height();
+        clipboard->setImage(image);
+    } else {
+        qDebug() << textReply->errorString();
+    }
+    imageReply->deleteLater();
 }
 
 void ClipboardManager::showSettingsDialog()
@@ -131,9 +196,18 @@ void ClipboardManager::reload()
     key = settings.value("key", "l2kf322ldXD").toString();
     port = settings.value("port", 8831).toUInt();
     sendAddress = settings.value("sendtoips", QStringList("255.255.255.255")).toStringList();
+
+    // Listen to udp port for notifications
     udpSocket = new QUdpSocket(this);
     udpSocket->bind(port, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
     connect(udpSocket, &QUdpSocket::readyRead, this, &ClipboardManager::reciveData);
+
+    // Listen to tcp port for http requests
+    QHttpServer *server = new QHttpServer;
+    connect(server, SIGNAL(newRequest(QHttpRequest*, QHttpResponse*)),
+            this, SLOT(handleHttp(QHttpRequest*, QHttpResponse*)));
+
+    server->listen(port);
 }
 
 void ClipboardManager::quit()
