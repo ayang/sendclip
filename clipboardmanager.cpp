@@ -20,7 +20,11 @@ ClipboardManager::ClipboardManager(QObject *parent) : QObject(parent)
 
 ClipboardManager::~ClipboardManager()
 {
-
+    if (udpSocket) {
+        udpSocket->close();
+        delete udpSocket;
+    }
+    delete nmg;
 }
 
 void ClipboardManager::createTrayIcon()

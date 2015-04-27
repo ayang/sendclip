@@ -50,7 +50,6 @@ private:
     uint port;
     QString username;
     QString key;
-    QByteArray buffer;
     QNetworkAccessManager *nmg;
     QNetworkReply *textReply, *imageReply;
 };
