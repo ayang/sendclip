@@ -25,6 +25,7 @@ public slots:
     void reciveData();
     void showSettingsDialog();
     void quit();
+    void about();
     void iconActivated(QSystemTrayIcon::ActivationReason reason);
     void createTrayIcon();
     void reload();
@@ -42,6 +43,7 @@ private:
     QAction *sendClipAction;
     QAction *settingsAction;
     QAction *quitAction;
+    QAction *aboutAction;
 
     SettingsDialog *settingsDialog;
 

@@ -1,5 +1,6 @@
 #include "clipboardmanager.h"
 #include "settingsdialog.h"
+#include "aboutdialog.h"
 #include "qencryptrc4.h"
 #include <QApplication>
 #include <QtWidgets>
@@ -47,9 +48,13 @@ void ClipboardManager::createTrayMenu()
     quitAction = new QAction(tr("Quit"), this);
     connect(quitAction, &QAction::triggered, this, &ClipboardManager::quit);
 
+    aboutAction = new QAction(tr("About"), this);
+    connect(aboutAction, &QAction::triggered, this, &ClipboardManager::about);
+
     trayIconMenu = new QMenu();
     trayIconMenu->addAction(sendClipAction);
     trayIconMenu->addAction(settingsAction);
+    trayIconMenu->addAction(aboutAction);
     trayIconMenu->addSeparator();
     trayIconMenu->addAction(quitAction);
 
@@ -217,6 +222,12 @@ void ClipboardManager::reload()
 void ClipboardManager::quit()
 {
     QApplication::quit();
+}
+
+void ClipboardManager::about()
+{
+    AboutDialog dlg;
+    dlg.exec();
 }
 
 void ClipboardManager::iconActivated(QSystemTrayIcon::ActivationReason reason)

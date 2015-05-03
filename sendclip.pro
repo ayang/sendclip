@@ -15,13 +15,16 @@ TEMPLATE = app
 SOURCES += main.cpp\
         settingsdialog.cpp \
     clipboardmanager.cpp \
-    qencryptrc4.cpp
+    qencryptrc4.cpp \
+    aboutdialog.cpp
 
 HEADERS  += settingsdialog.h \
     clipboardmanager.h \
-    qencryptrc4.h
+    qencryptrc4.h \
+    aboutdialog.h
 
-FORMS    += settingsdialog.ui
+FORMS    += settingsdialog.ui \
+    aboutdialog.ui
 
 RESOURCES += \
     images.qrc

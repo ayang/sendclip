@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/icons">
         <file alias="systray.png">images/systray.png</file>
+        <file alias="main.png">images/main.png</file>
     </qresource>
 </RCC>
