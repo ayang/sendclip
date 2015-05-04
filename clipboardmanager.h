@@ -30,8 +30,7 @@ public slots:
     void createTrayIcon();
     void reload();
     void handleHttp(QHttpRequest *req, QHttpResponse *resp);
-    void getTextFinish();
-    void getImageFinish();
+    void dataReplyFinish(QNetworkReply *reply);
 
 private:
     void createTrayMenu();
@@ -53,7 +52,8 @@ private:
     QString username;
     QString key;
     QNetworkAccessManager *nmg;
-    QNetworkReply *textReply, *imageReply;
+    QStringList curFormats;
+    QMap<QString, QByteArray> mimeDatas;
 };
 
 #endif // CLIPBOARDMANAGER_H

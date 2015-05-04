@@ -17,6 +17,7 @@ ClipboardManager::ClipboardManager(QObject *parent) : QObject(parent)
     if (settings.value("username", "").toString().length() == 0)
         showSettingsDialog();
     reload();
+    connect(nmg, &QNetworkAccessManager::finished, this, &ClipboardManager::dataReplyFinish);
 }
 
 ClipboardManager::~ClipboardManager()
@@ -67,10 +68,16 @@ void ClipboardManager::sendClipboard()
     QDataStream out(&data, QIODevice::WriteOnly);
     out << username << QHostInfo::localHostName();
     QStringList typeList;
-    if (clipboard->text().length())
-        typeList.append("text");
-    if (!clipboard->image().isNull())
-        typeList.append("image");
+    qDebug() << "Send clipboard formats:" << clipboard->mimeData()->formats();
+
+    foreach (QString format, clipboard->mimeData()->formats()) {
+        if (format=="text/plain"||format=="text/html"||format=="text/richtext"||
+                format=="image/png"||format=="image/tiff"||format=="application/x-qt-image") {
+            typeList.append(format);
+        }
+    }
+    if (typeList.empty())
+        return;
     QString typeText = typeList.join(',');
     out << typeText;
 
@@ -89,24 +96,23 @@ void ClipboardManager::reciveData()
         udpSocket->readDatagram(datagram.data(), datagram.size(), &peerAddress, &peerPort);
         QDataStream in(&datagram, QIODevice::ReadOnly);
         QString toUsername, hostname;
-        QString typeText;
-        in >> toUsername >> hostname >> typeText;
+        QString formatString;
+        qDebug() << formatString;
+        in >> toUsername >> hostname >> formatString;
         if (toUsername != username)
             continue;
         if (hostname == QHostInfo::localHostName())
             continue;
 
-        foreach (QString type, typeText.split(',')) {
-            if (type == "text") {
-                QString url = QString("http://%1:%2/clipboard/text").arg(peerAddress.toString()).arg(port);
-                textReply = nmg->get(QNetworkRequest(url));
-                connect(textReply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
-            }
-            else if (type == "image") {
-                QString url = QString("http://%1:%2/clipboard/image").arg(peerAddress.toString()).arg(port);
-                imageReply = nmg->get(QNetworkRequest(url));
-                connect(imageReply, &QNetworkReply::finished, this, &ClipboardManager::getImageFinish);
-            }
+        curFormats.clear();
+        mimeDatas.clear();
+
+        foreach (QString format, formatString.split(',')) {
+            QString urlString = QString("http://%1:%2/clipboard").arg(peerAddress.toString()).arg(port);
+            QNetworkRequest request(urlString);
+            request.setRawHeader("Clipboard-Format", format.toLatin1());
+            QNetworkReply *reply = nmg->get(request);
+            curFormats.append(format);
         }
     }
 }
@@ -116,33 +122,15 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
     QClipboard *clipboard = QGuiApplication::clipboard();
     QEncryptRc4 rc4;
     rc4.UseKey(key);
-    qDebug() << req->path();
-    if (req->path() == "/clipboard/text") {
+    if (req->path() == "/clipboard") {
+        QString format = req->header("Clipboard-Format");
+        resp->setHeader("Clipboard-Format", format);
         resp->writeHead(200);
-        resp->setHeader("Content-Type", "text/encrypted-plain");
 
-        QByteArray text = clipboard->text().toUtf8();
-        QByteArray data;
-        rc4.Encrypt(text, data);
-        resp->write(data);
-    }
-    else if (req->path() == "/clipboard/image") {
-        resp->writeHead(200);
-        resp->setHeader("Content-Type", "image/encrypted-png");
-
-        QImage image = clipboard->image();
-        qDebug() << "send image: " << image.width() << image.height();
-
-        QByteArray imageData;
-        QBuffer buf(&imageData);
-        buf.open(QIODevice::WriteOnly);
-        image.save(&buf, "PNG");
-        buf.close();
-        qDebug() << "imagedata size:" << imageData.size();
-        QByteArray data;
-        rc4.Encrypt(imageData, data);
-//        data = imageData;
-        resp->write(data);
+        QByteArray data = clipboard->mimeData()->data(format);
+        QByteArray rawData;
+        rc4.Encrypt(data, rawData);
+        resp->write(rawData);
     }
     else {
         resp->writeHead(404);
@@ -150,40 +138,29 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
     resp->end();
 }
 
-void ClipboardManager::getTextFinish()
+void ClipboardManager::dataReplyFinish(QNetworkReply *reply)
 {
-    if (!textReply->error()) {
+    if (!reply->error()) {
         QClipboard *clipboard = QGuiApplication::clipboard();
-        QByteArray data = textReply->readAll();
-        QByteArray text;
+        QByteArray rawData = reply->readAll();
+        QByteArray data;
         QEncryptRc4 rc4;
         rc4.UseKey(key);
-        rc4.Encrypt(data, text);
-        clipboard->setText(QString::fromUtf8(text));
+        rc4.Encrypt(rawData, data);
+        QString format = QString::fromLatin1(reply->rawHeader("Clipboard-Format"));
+        mimeDatas[format] = data;
+        if (mimeDatas.size() == curFormats.size()) {
+            qDebug() << curFormats;
+            QMimeData *mime = new QMimeData;
+            foreach (QString format, curFormats) {
+                mime->setData(format, mimeDatas[format]);
+            }
+            clipboard->setMimeData(mime);
+        }
     } else {
-        qDebug() << textReply->errorString();
+        qDebug() << reply->errorString();
     }
-    textReply->deleteLater();
-}
-
-void ClipboardManager::getImageFinish()
-{
-    qDebug() << "recived image clipboard";
-    if (!imageReply->error()) {
-        QClipboard *clipboard = QGuiApplication::clipboard();
-        QByteArray data = imageReply->readAll();
-        QByteArray imageData;
-        QEncryptRc4 rc4;
-        rc4.UseKey(key);
-        rc4.Encrypt(data, imageData);
-//        imageData = data;
-        QImage image = QImage::fromData(imageData);
-        qDebug() << "recived image: " << image.width() << image.height();
-        clipboard->setImage(image);
-    } else {
-        qDebug() << textReply->errorString();
-    }
-    imageReply->deleteLater();
+    reply->deleteLater();
 }
 
 void ClipboardManager::showSettingsDialog()
