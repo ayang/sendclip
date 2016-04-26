@@ -63,19 +63,22 @@ void ClipboardManager::createTrayMenu()
 void ClipboardManager::sendClipboard()
 {
     QClipboard *clipboard = QGuiApplication::clipboard();
-    QByteArray data;
-    QDataStream out(&data, QIODevice::WriteOnly);
-    out << username << QHostInfo::localHostName();
+    QString data;
+    data.append(username);
+    data.append("\n");
+    data.append(QHostInfo::localHostName());
+    data.append("\n");
     QStringList typeList;
     if (clipboard->text().length())
         typeList.append("text");
     if (!clipboard->image().isNull())
         typeList.append("image");
     QString typeText = typeList.join(',');
-    out << typeText;
+    data.append(typeText);
 
     foreach (QString address, sendAddress) {
-        udpSocket->writeDatagram(data, QHostAddress(address), port);
+        qDebug() << data;
+        udpSocket->writeDatagram(data.toLocal8Bit(), QHostAddress(address), port);
     }
 }
 
@@ -87,10 +90,15 @@ void ClipboardManager::reciveData()
         quint16 peerPort;
         datagram.resize(udpSocket->pendingDatagramSize());
         udpSocket->readDatagram(datagram.data(), datagram.size(), &peerAddress, &peerPort);
-        QDataStream in(&datagram, QIODevice::ReadOnly);
+        QString data(datagram);
+        QStringList lines = data.split("\n");
+        if (lines.count() < 3)
+            continue;
         QString toUsername, hostname;
         QString typeText;
-        in >> toUsername >> hostname >> typeText;
+        toUsername = lines[0];
+        hostname = lines[1];
+        typeText = lines[2];
         if (toUsername != username)
             continue;
         if (hostname == QHostInfo::localHostName())
