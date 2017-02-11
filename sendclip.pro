@@ -40,9 +40,23 @@ ICON = images/main.icns
 RC_FILE = sendclip.rc
 
 # qhttpserver
-win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../qhttpserver/lib/release/ -lqhttpserver
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../qhttpserver/lib/debug/ -lqhttpserver
-else:unix: LIBS += -L$$PWD/../qhttpserver/lib/ -lqhttpserver
+#win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../qhttpserver/lib/release/ -lqhttpserver
+#else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../qhttpserver/lib/debug/ -lqhttpserver
+#else:unix: LIBS += -L$$PWD/../qhttpserver/lib/ -lqhttpserver
 
-INCLUDEPATH += $$PWD/../qhttpserver/src
-DEPENDPATH += $$PWD/../qhttpserver/src
+QHTTPDIR = $$PWD/../qhttp
+INCLUDEPATH +=  . $$QHTTPDIR/src
+LIBS        += -L$$QHTTPDIR/xbin -lqhttp
+
+unix {
+    CONFIG += link_pkgconfig
+}
+
+#USE_APP_INDICATOR = 1
+
+defined(USE_APP_INDICATOR, var) {
+    message("use app indicator")
+    DEFINES += USE_APP_INDICATOR
+    HEADERS += vendor/qappindicator.h
+    SOURCES += vendor/qappindicator.cc
+}

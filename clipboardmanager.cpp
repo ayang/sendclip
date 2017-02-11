@@ -1,3 +1,8 @@
+﻿#include "qhttpserver.hpp"
+#include "qhttpserverconnection.hpp"
+#include "qhttpserverrequest.hpp"
+#include "qhttpserverresponse.hpp"
+
 #include "clipboardmanager.h"
 #include "settingsdialog.h"
 #include "aboutdialog.h"
@@ -5,9 +10,8 @@
 #include <QApplication>
 #include <QtWidgets>
 #include <QtNetwork/QtNetwork>
-#include <qhttpserver.h>
-#include <qhttprequest.h>
-#include <qhttpresponse.h>
+
+using namespace qhttp::server;
 
 ClipboardManager::ClipboardManager(QObject *parent) : QObject(parent)
 {
@@ -124,19 +128,19 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
     QClipboard *clipboard = QGuiApplication::clipboard();
     QEncryptRc4 rc4;
     rc4.UseKey(key);
-    qDebug() << req->path();
-    if (req->path() == "/clipboard/text") {
-        resp->writeHead(200);
-        resp->setHeader("Content-Type", "text/encrypted-plain");
+    qDebug() << req->url().path();
+    if (req->url().path() == "/clipboard/text") {
+        resp->setStatusCode(qhttp::ESTATUS_OK);
+        resp->addHeader("Content-Type", "text/encrypted-plain");
 
         QByteArray text = clipboard->text().toUtf8();
         QByteArray data;
         rc4.Encrypt(text, data);
         resp->write(data);
     }
-    else if (req->path() == "/clipboard/image") {
-        resp->writeHead(200);
-        resp->setHeader("Content-Type", "image/encrypted-png");
+    else if (req->url().path() == "/clipboard/image") {
+        resp->setStatusCode(qhttp::ESTATUS_OK);
+        resp->addHeader("Content-Type", "image/encrypted-png");
 
         QImage image = clipboard->image();
         qDebug() << "send image: " << image.width() << image.height();
@@ -153,7 +157,7 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
         resp->write(data);
     }
     else {
-        resp->writeHead(404);
+        resp->setStatusCode(qhttp::ESTATUS_NOT_FOUND);
     }
     resp->end();
 }

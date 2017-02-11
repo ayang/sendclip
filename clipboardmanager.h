@@ -1,13 +1,20 @@
-#ifndef CLIPBOARDMANAGER_H
+﻿#ifndef CLIPBOARDMANAGER_H
 #define CLIPBOARDMANAGER_H
 
 #include <QObject>
 #include <QtWidgets>
+#include "qhttpserverrequest.hpp"
+#include "qhttpserverresponse.hpp"
+
+//namespace qhttp::server {
+//class QHttpRequest;
+//class QHttpResponse;
+//}
+
+using namespace qhttp::server;
 
 class SettingsDialog;
 class QUdpSocket;
-class QHttpRequest;
-class QHttpResponse;
 class QNetworkAccessManager;
 class QNetworkReply;
 
