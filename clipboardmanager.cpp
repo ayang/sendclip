@@ -20,6 +20,7 @@ ClipboardManager::ClipboardManager(QObject *parent) : QObject(parent)
     QSettings settings;
     if (settings.value("username", "").toString().length() == 0)
         showSettingsDialog();
+
     reload();
 }
 
@@ -117,7 +118,10 @@ void ClipboardManager::reciveData()
         foreach (QString type, typeText.split(',')) {
             if (type == "text") {
                 QString url = QString("http://%1:%2/clipboard/text").arg(peerAddress.toString()).arg(port);
-                textReply = nmg->get(QNetworkRequest(url));
+                qDebug()<<url;
+                QNetworkRequest request;
+                request.setUrl(QUrl(url));
+                QNetworkReply *textReply = nmg->get(request);
                 connect(textReply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
             }
             else if (type == "html") {
@@ -179,6 +183,7 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
 void ClipboardManager::getTextFinish()
 {
     qDebug() << "recived text clipboard";
+    QNetworkReply *textReply = dynamic_cast<QNetworkReply*>(sender());
     if (!textReply->error()) {
         QClipboard *clipboard = QGuiApplication::clipboard();
         QByteArray data = textReply->readAll();
@@ -271,8 +276,7 @@ void ClipboardManager::iconActivated(QSystemTrayIcon::ActivationReason reason)
     switch (reason) {
     case QSystemTrayIcon::Trigger:
         sendClipboard();
-        break;
-    default:
+        trayIconMenu->hide();
         break;
     }
 }

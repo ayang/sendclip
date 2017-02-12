@@ -1,5 +1,6 @@
 ﻿#include "clipboardmanager.h"
 #include <QApplication>
+#include <QNetworkProxyFactory>
 #include <QSystemTrayIcon>
 #include <QMessageBox>
 #include "qencryptrc4.h"
@@ -22,6 +23,9 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName("Tekzip");
     QCoreApplication::setOrganizationDomain("tekzip.me");
     QCoreApplication::setApplicationName("SendClip");
+
+    // set no proxy to fix crash when system proxy is using pac
+    QNetworkProxyFactory::setUseSystemConfiguration(false);
 
 #ifndef USE_APP_INDICATOR
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
