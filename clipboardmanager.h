@@ -3,13 +3,13 @@
 
 #include <QObject>
 #include <QtWidgets>
-#include "qhttpserverrequest.hpp"
-#include "qhttpserverresponse.hpp"
 
-//namespace qhttp::server {
-//class QHttpRequest;
-//class QHttpResponse;
-//}
+namespace qhttp {
+    namespace server {
+        class QHttpRequest;
+        class QHttpResponse;
+    }
+}
 
 using namespace qhttp::server;
 
@@ -38,10 +38,13 @@ public slots:
     void reload();
     void handleHttp(QHttpRequest *req, QHttpResponse *resp);
     void getTextFinish();
+    void getHtmlFinish();
     void getImageFinish();
 
 private:
     void createTrayMenu();
+    QByteArray encrypt(const QByteArray &data);
+    QByteArray decrypt(const QByteArray &data);
 
 private:
     QSystemTrayIcon *trayIcon;
@@ -60,7 +63,8 @@ private:
     QString username;
     QString key;
     QNetworkAccessManager *nmg;
-    QNetworkReply *textReply, *imageReply;
+    QNetworkReply *textReply, *htmlReply, *imageReply;
+    QMimeData recivedMimeData;
 };
 
 #endif // CLIPBOARDMANAGER_H

@@ -77,6 +77,8 @@ void ClipboardManager::sendClipboard()
         typeList.append("text");
     if (!clipboard->image().isNull())
         typeList.append("image");
+    if (!clipboard->mimeData()->html().length())
+        typeList.append("html");
     QString typeText = typeList.join(',');
     data.append(typeText);
 
@@ -108,11 +110,20 @@ void ClipboardManager::reciveData()
         if (hostname == QHostInfo::localHostName())
             continue;
 
+        recivedMimeData.clear();
+        trayIcon->showMessage(tr("Clipboard Recived"), tr("%1(%2) send a clipboard with %3")
+                              .arg(hostname, peerAddress.toString(), typeText));
+
         foreach (QString type, typeText.split(',')) {
             if (type == "text") {
                 QString url = QString("http://%1:%2/clipboard/text").arg(peerAddress.toString()).arg(port);
                 textReply = nmg->get(QNetworkRequest(url));
                 connect(textReply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
+            }
+            else if (type == "html") {
+                QString url = QString("http://%1:%2/clipboard/html").arg(peerAddress.toString()).arg(port);
+                htmlReply = nmg->get(QNetworkRequest(url));
+                connect(htmlReply, &QNetworkReply::finished, this, &ClipboardManager::getHtmlFinish);
             }
             else if (type == "image") {
                 QString url = QString("http://%1:%2/clipboard/image").arg(peerAddress.toString()).arg(port);
@@ -133,10 +144,15 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
         resp->setStatusCode(qhttp::ESTATUS_OK);
         resp->addHeader("Content-Type", "text/encrypted-plain");
 
-        QByteArray text = clipboard->text().toUtf8();
-        QByteArray data;
-        rc4.Encrypt(text, data);
-        resp->write(data);
+        QByteArray data = clipboard->text().toUtf8();
+        resp->write(encrypt(data));
+    }
+    else if (req->url().path() == "/clipboard/html") {
+        resp->setStatusCode(qhttp::ESTATUS_OK);
+        resp->addHeader("Content-Type", "text/encrypted-html");
+
+        QByteArray data = clipboard->mimeData()->html().toUtf8();
+        resp->write(encrypt(data));
     }
     else if (req->url().path() == "/clipboard/image") {
         resp->setStatusCode(qhttp::ESTATUS_OK);
@@ -151,10 +167,8 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
         image.save(&buf, "PNG");
         buf.close();
         qDebug() << "imagedata size:" << imageData.size();
-        QByteArray data;
-        rc4.Encrypt(imageData, data);
-//        data = imageData;
-        resp->write(data);
+
+        resp->write(encrypt(imageData));
     }
     else {
         resp->setStatusCode(qhttp::ESTATUS_NOT_FOUND);
@@ -164,18 +178,32 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
 
 void ClipboardManager::getTextFinish()
 {
+    qDebug() << "recived text clipboard";
     if (!textReply->error()) {
         QClipboard *clipboard = QGuiApplication::clipboard();
         QByteArray data = textReply->readAll();
-        QByteArray text;
-        QEncryptRc4 rc4;
-        rc4.UseKey(key);
-        rc4.Encrypt(data, text);
-        clipboard->setText(QString::fromUtf8(text));
+        QString text = QString::fromUtf8(decrypt(data));
+        recivedMimeData.setText(text);
+        clipboard->setMimeData(&recivedMimeData);
     } else {
-        qDebug() << textReply->errorString();
+        qDebug() << "Receive text error: " << textReply->errorString();
     }
     textReply->deleteLater();
+}
+
+void ClipboardManager::getHtmlFinish()
+{
+    qDebug() << "recived text clipboard";
+    if (!htmlReply->error()) {
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        QByteArray data = htmlReply->readAll();
+        QString html = QString::fromUtf8(decrypt(data));
+        recivedMimeData.setHtml(html);
+        clipboard->setMimeData(&recivedMimeData);
+    } else {
+        qDebug() << "Receive html error: " << htmlReply->errorString();
+    }
+    htmlReply->deleteLater();
 }
 
 void ClipboardManager::getImageFinish()
@@ -184,16 +212,12 @@ void ClipboardManager::getImageFinish()
     if (!imageReply->error()) {
         QClipboard *clipboard = QGuiApplication::clipboard();
         QByteArray data = imageReply->readAll();
-        QByteArray imageData;
-        QEncryptRc4 rc4;
-        rc4.UseKey(key);
-        rc4.Encrypt(data, imageData);
-//        imageData = data;
-        QImage image = QImage::fromData(imageData);
+        QImage image = QImage::fromData(decrypt(data));
         qDebug() << "recived image: " << image.width() << image.height();
-        clipboard->setImage(image);
+        recivedMimeData.setImageData(image);
+        clipboard->setMimeData(&recivedMimeData);
     } else {
-        qDebug() << textReply->errorString();
+        qDebug() << "Receive image error: " << imageReply->errorString();
     }
     imageReply->deleteLater();
 }
@@ -220,7 +244,7 @@ void ClipboardManager::reload()
 
     // Listen to udp port for notifications
     udpSocket = new QUdpSocket(this);
-    udpSocket->bind(port, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+    udpSocket->bind(QHostAddress::AnyIPv4, port, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
     connect(udpSocket, &QUdpSocket::readyRead, this, &ClipboardManager::reciveData);
 
     // Listen to tcp port for http requests
@@ -251,4 +275,18 @@ void ClipboardManager::iconActivated(QSystemTrayIcon::ActivationReason reason)
     default:
         break;
     }
+}
+
+QByteArray ClipboardManager::encrypt(const QByteArray &data)
+{
+    QByteArray encryptedData;
+    QEncryptRc4 rc4;
+    rc4.UseKey(key);
+    rc4.Encrypt(data, encryptedData);
+    return encryptedData;
+}
+
+QByteArray ClipboardManager::decrypt(const QByteArray &data)
+{
+    return encrypt(data);
 }
