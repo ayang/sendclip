@@ -63,7 +63,6 @@ private:
     QString username;
     QString key;
     QNetworkAccessManager *nmg;
-    QNetworkReply *textReply, *htmlReply, *imageReply;
     QMimeData recivedMimeData;
 };
 

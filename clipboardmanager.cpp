@@ -113,7 +113,7 @@ void ClipboardManager::reciveData()
 
         recivedMimeData.clear();
         trayIcon->showMessage(tr("Clipboard Recived"), tr("%1(%2) send a clipboard with %3")
-                              .arg(hostname, peerAddress.toString(), typeText));
+                              .arg(hostname, peerAddress.toString(), typeText), QSystemTrayIcon::Information, 3000);
 
         foreach (QString type, typeText.split(',')) {
             if (type == "text") {
@@ -121,18 +121,22 @@ void ClipboardManager::reciveData()
                 qDebug()<<url;
                 QNetworkRequest request;
                 request.setUrl(QUrl(url));
-                QNetworkReply *textReply = nmg->get(request);
-                connect(textReply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
+                QNetworkReply *reply = nmg->get(request);
+                connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
             }
             else if (type == "html") {
                 QString url = QString("http://%1:%2/clipboard/html").arg(peerAddress.toString()).arg(port);
-                htmlReply = nmg->get(QNetworkRequest(url));
-                connect(htmlReply, &QNetworkReply::finished, this, &ClipboardManager::getHtmlFinish);
+                QNetworkRequest request;
+                request.setUrl(QUrl(url));
+                QNetworkReply *reply = nmg->get(request);
+                connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getHtmlFinish);
             }
             else if (type == "image") {
                 QString url = QString("http://%1:%2/clipboard/image").arg(peerAddress.toString()).arg(port);
-                imageReply = nmg->get(QNetworkRequest(url));
-                connect(imageReply, &QNetworkReply::finished, this, &ClipboardManager::getImageFinish);
+                QNetworkRequest request;
+                request.setUrl(QUrl(url));
+                QNetworkReply *reply = nmg->get(request);
+                connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getImageFinish);
             }
         }
     }
@@ -183,48 +187,50 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
 void ClipboardManager::getTextFinish()
 {
     qDebug() << "recived text clipboard";
-    QNetworkReply *textReply = dynamic_cast<QNetworkReply*>(sender());
-    if (!textReply->error()) {
+    QNetworkReply *reply = dynamic_cast<QNetworkReply*>(sender());
+    if (!reply->error()) {
         QClipboard *clipboard = QGuiApplication::clipboard();
-        QByteArray data = textReply->readAll();
+        QByteArray data = reply->readAll();
         QString text = QString::fromUtf8(decrypt(data));
         recivedMimeData.setText(text);
         clipboard->setMimeData(&recivedMimeData);
     } else {
-        qDebug() << "Receive text error: " << textReply->errorString();
+        qDebug() << "Receive text error: " << reply->errorString();
     }
-    textReply->deleteLater();
+    reply->deleteLater();
 }
 
 void ClipboardManager::getHtmlFinish()
 {
     qDebug() << "recived text clipboard";
-    if (!htmlReply->error()) {
+    QNetworkReply *reply = dynamic_cast<QNetworkReply*>(sender());
+    if (!reply->error()) {
         QClipboard *clipboard = QGuiApplication::clipboard();
-        QByteArray data = htmlReply->readAll();
+        QByteArray data = reply->readAll();
         QString html = QString::fromUtf8(decrypt(data));
         recivedMimeData.setHtml(html);
         clipboard->setMimeData(&recivedMimeData);
     } else {
-        qDebug() << "Receive html error: " << htmlReply->errorString();
+        qDebug() << "Receive html error: " << reply->errorString();
     }
-    htmlReply->deleteLater();
+    reply->deleteLater();
 }
 
 void ClipboardManager::getImageFinish()
 {
     qDebug() << "recived image clipboard";
-    if (!imageReply->error()) {
+    QNetworkReply *reply = dynamic_cast<QNetworkReply*>(sender());
+    if (!reply->error()) {
         QClipboard *clipboard = QGuiApplication::clipboard();
-        QByteArray data = imageReply->readAll();
+        QByteArray data = reply->readAll();
         QImage image = QImage::fromData(decrypt(data));
         qDebug() << "recived image: " << image.width() << image.height();
         recivedMimeData.setImageData(image);
         clipboard->setMimeData(&recivedMimeData);
     } else {
-        qDebug() << "Receive image error: " << imageReply->errorString();
+        qDebug() << "Receive image error: " << reply->errorString();
     }
-    imageReply->deleteLater();
+    reply->deleteLater();
 }
 
 void ClipboardManager::showSettingsDialog()
