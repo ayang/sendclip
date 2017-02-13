@@ -104,6 +104,7 @@ private:
     QNetworkAccessManager *nmg;
     QMutex dataMutex;
     ReceivedData received;
+    QNetworkReply * requestClipboard(QString url);
 };
 
 #endif // CLIPBOARDMANAGER_H

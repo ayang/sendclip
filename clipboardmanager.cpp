@@ -172,10 +172,21 @@ void ClipboardManager::sendClipboard()
     QString typeText = typeList.join(',');
     data.append(typeText);
 
+    qDebug() << "udp send: " << data;
     foreach (QString address, sendAddress) {
-        qDebug() << data;
         udpSocket->writeDatagram(data.toLocal8Bit(), QHostAddress(address), port);
     }
+}
+
+QNetworkReply * ClipboardManager::requestClipboard(QString url)
+{
+    qDebug()<<"get: "<<url;
+    QNetworkRequest request;
+    request.setUrl(QUrl(url));
+    QNetworkReply *reply = nmg->get(request);
+    reply->setProperty("version", received.getVersion());
+
+    return reply;
 }
 
 void ClipboardManager::reciveData()
@@ -187,6 +198,7 @@ void ClipboardManager::reciveData()
         datagram.resize(udpSocket->pendingDatagramSize());
         udpSocket->readDatagram(datagram.data(), datagram.size(), &peerAddress, &peerPort);
         QString data(datagram);
+        qDebug() << "udp received: " << data;
         QStringList lines = data.split("\n");
         if (lines.count() < 3)
             continue;
@@ -210,27 +222,17 @@ void ClipboardManager::reciveData()
         foreach (QString type, types) {
             if (type == "text") {
                 QString url = QString("http://%1:%2/clipboard/text").arg(peerAddress.toString()).arg(port);
-                qDebug()<<url;
-                QNetworkRequest request;
-                request.setUrl(QUrl(url));
-                QNetworkReply *reply = nmg->get(request);
-                reply->setProperty("version", received.getVersion());
+                QNetworkReply *reply = requestClipboard(url);
                 connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
             }
             else if (type == "html") {
                 QString url = QString("http://%1:%2/clipboard/html").arg(peerAddress.toString()).arg(port);
-                QNetworkRequest request;
-                request.setUrl(QUrl(url));
-                QNetworkReply *reply = nmg->get(request);
-                reply->setProperty("version", version);
+                QNetworkReply *reply = requestClipboard(url);
                 connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getHtmlFinish);
             }
             else if (type == "image") {
                 QString url = QString("http://%1:%2/clipboard/image").arg(peerAddress.toString()).arg(port);
-                QNetworkRequest request;
-                request.setUrl(QUrl(url));
-                QNetworkReply *reply = nmg->get(request);
-                reply->setProperty("version", received.getVersion());
+                QNetworkReply *reply = requestClipboard(url);
                 connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getImageFinish);
             }
         }
@@ -242,7 +244,7 @@ void ClipboardManager::handleHttp(QHttpRequest *req, QHttpResponse *resp)
     QClipboard *clipboard = QGuiApplication::clipboard();
     QEncryptRc4 rc4;
     rc4.UseKey(key);
-    qDebug() << req->url().path();
+    qDebug() << "serve: " << req->url().path();
     if (req->url().path() == "/clipboard/text") {
         resp->setStatusCode(qhttp::ESTATUS_OK);
         resp->addHeader("Content-Type", "text/encrypted-plain");
@@ -301,7 +303,7 @@ void ClipboardManager::getTextFinish()
 
 void ClipboardManager::getHtmlFinish()
 {
-    qDebug() << "recived text clipboard";
+    qDebug() << "recived html clipboard";
     QNetworkReply *reply = dynamic_cast<QNetworkReply*>(sender());
     if (!reply->error()) {
         QByteArray data = reply->readAll();
