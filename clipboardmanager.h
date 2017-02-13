@@ -18,6 +18,45 @@ class QUdpSocket;
 class QNetworkAccessManager;
 class QNetworkReply;
 
+class ReceivedData
+{
+public:
+
+    ReceivedData(): version(0), types(), receivedTypes(), text(), html(), image() {}
+
+    void clear();
+
+    int newVersion();
+
+    int newVersion(const QStringList &types);
+
+    void setText(const QString &text);
+    void setHtml(const QString &html);
+    void setImage(const QImage &image);
+
+    bool completed() const;
+
+    void setClipboard();
+
+    int getVersion() const;
+
+    QStringList getTypes() const;
+
+    QString getText() const;
+
+    QString getHtml() const;
+
+    QImage getImage() const;
+
+private:
+    int version;
+    QStringList types;
+    QSet<QString> receivedTypes;
+    QString text;
+    QString html;
+    QImage image;
+};
+
 class ClipboardManager : public QObject
 {
     Q_OBJECT
@@ -63,7 +102,8 @@ private:
     QString username;
     QString key;
     QNetworkAccessManager *nmg;
-    QMimeData recivedMimeData;
+    QMutex dataMutex;
+    ReceivedData received;
 };
 
 #endif // CLIPBOARDMANAGER_H

@@ -13,6 +13,95 @@
 
 using namespace qhttp::server;
 
+int ReceivedData::getVersion() const
+{
+    return version;
+}
+
+QStringList ReceivedData::getTypes() const
+{
+    return types;
+}
+
+QString ReceivedData::getText() const
+{
+    return text;
+}
+
+QString ReceivedData::getHtml() const
+{
+    return html;
+}
+
+QImage ReceivedData::getImage() const
+{
+    return image;
+}
+
+void ReceivedData::clear() {
+    types.clear();
+    receivedTypes.clear();
+    text.clear();
+    html.clear();
+    image = QImage();
+}
+
+int ReceivedData::newVersion() {
+    version++;
+    clear();
+    return version;
+}
+
+
+int ReceivedData::newVersion(const QStringList &types) {
+    version++;
+    clear();
+    this->types = types;
+    return version;
+}
+
+void ReceivedData::setText(const QString &text)
+{
+    this->text = text;
+    receivedTypes.insert("text");
+}
+
+void ReceivedData::setHtml(const QString &html)
+{
+    this->html = html;
+    receivedTypes.insert("html");
+}
+
+void ReceivedData::setImage(const QImage &image)
+{
+    this->image = image;
+    receivedTypes.insert("image");
+}
+
+bool ReceivedData::completed() const {
+    foreach (QString type, types) {
+        if (!receivedTypes.contains(type)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void ReceivedData::setClipboard() {
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    QMimeData *mime = new QMimeData;
+    if (text.length() > 0) {
+        mime->setText(text);
+    }
+    if (html.length() > 0) {
+        mime->setHtml(html);
+    }
+    if (!image.isNull()) {
+        mime->setImageData(image);
+    }
+    clipboard->setMimeData(mime);
+}
+
 ClipboardManager::ClipboardManager(QObject *parent) : QObject(parent)
 {
     udpSocket = NULL;
@@ -74,11 +163,11 @@ void ClipboardManager::sendClipboard()
     data.append(QHostInfo::localHostName());
     data.append("\n");
     QStringList typeList;
-    if (clipboard->text().length())
+    if (clipboard->text().length() > 0)
         typeList.append("text");
     if (!clipboard->image().isNull())
         typeList.append("image");
-    if (!clipboard->mimeData()->html().length())
+    if (clipboard->mimeData()->html().length() > 0)
         typeList.append("html");
     QString typeText = typeList.join(',');
     data.append(typeText);
@@ -106,22 +195,26 @@ void ClipboardManager::reciveData()
         toUsername = lines[0];
         hostname = lines[1];
         typeText = lines[2];
+        QStringList types = typeText.split(',');
         if (toUsername != username)
             continue;
         if (hostname == QHostInfo::localHostName())
             continue;
 
-        recivedMimeData.clear();
+        dataMutex.lock();
+        int version = received.newVersion(types);
+        dataMutex.unlock();
         trayIcon->showMessage(tr("Clipboard Recived"), tr("%1(%2) send a clipboard with %3")
                               .arg(hostname, peerAddress.toString(), typeText), QSystemTrayIcon::Information, 3000);
 
-        foreach (QString type, typeText.split(',')) {
+        foreach (QString type, types) {
             if (type == "text") {
                 QString url = QString("http://%1:%2/clipboard/text").arg(peerAddress.toString()).arg(port);
                 qDebug()<<url;
                 QNetworkRequest request;
                 request.setUrl(QUrl(url));
                 QNetworkReply *reply = nmg->get(request);
+                reply->setProperty("version", received.getVersion());
                 connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getTextFinish);
             }
             else if (type == "html") {
@@ -129,6 +222,7 @@ void ClipboardManager::reciveData()
                 QNetworkRequest request;
                 request.setUrl(QUrl(url));
                 QNetworkReply *reply = nmg->get(request);
+                reply->setProperty("version", version);
                 connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getHtmlFinish);
             }
             else if (type == "image") {
@@ -136,6 +230,7 @@ void ClipboardManager::reciveData()
                 QNetworkRequest request;
                 request.setUrl(QUrl(url));
                 QNetworkReply *reply = nmg->get(request);
+                reply->setProperty("version", received.getVersion());
                 connect(reply, &QNetworkReply::finished, this, &ClipboardManager::getImageFinish);
             }
         }
@@ -189,11 +284,15 @@ void ClipboardManager::getTextFinish()
     qDebug() << "recived text clipboard";
     QNetworkReply *reply = dynamic_cast<QNetworkReply*>(sender());
     if (!reply->error()) {
-        QClipboard *clipboard = QGuiApplication::clipboard();
         QByteArray data = reply->readAll();
         QString text = QString::fromUtf8(decrypt(data));
-        recivedMimeData.setText(text);
-        clipboard->setMimeData(&recivedMimeData);
+        int version = reply->property("version").toInt();
+        dataMutex.lock();
+        if (version == received.getVersion()) {
+            received.setText(text);
+            received.setClipboard();
+        }
+        dataMutex.unlock();
     } else {
         qDebug() << "Receive text error: " << reply->errorString();
     }
@@ -205,11 +304,15 @@ void ClipboardManager::getHtmlFinish()
     qDebug() << "recived text clipboard";
     QNetworkReply *reply = dynamic_cast<QNetworkReply*>(sender());
     if (!reply->error()) {
-        QClipboard *clipboard = QGuiApplication::clipboard();
         QByteArray data = reply->readAll();
         QString html = QString::fromUtf8(decrypt(data));
-        recivedMimeData.setHtml(html);
-        clipboard->setMimeData(&recivedMimeData);
+        int version = reply->property("version").toInt();
+        dataMutex.lock();
+        if (version == received.getVersion()) {
+            received.setHtml(html);
+            received.setClipboard();
+        }
+        dataMutex.unlock();
     } else {
         qDebug() << "Receive html error: " << reply->errorString();
     }
@@ -221,12 +324,16 @@ void ClipboardManager::getImageFinish()
     qDebug() << "recived image clipboard";
     QNetworkReply *reply = dynamic_cast<QNetworkReply*>(sender());
     if (!reply->error()) {
-        QClipboard *clipboard = QGuiApplication::clipboard();
         QByteArray data = reply->readAll();
         QImage image = QImage::fromData(decrypt(data));
         qDebug() << "recived image: " << image.width() << image.height();
-        recivedMimeData.setImageData(image);
-        clipboard->setMimeData(&recivedMimeData);
+        int version = reply->property("version").toInt();
+        dataMutex.lock();
+        if (version == received.getVersion()) {
+            received.setImage(image);
+            received.setClipboard();
+        }
+        dataMutex.unlock();
     } else {
         qDebug() << "Receive image error: " << reply->errorString();
     }
@@ -282,7 +389,8 @@ void ClipboardManager::iconActivated(QSystemTrayIcon::ActivationReason reason)
     switch (reason) {
     case QSystemTrayIcon::Trigger:
         sendClipboard();
-        trayIconMenu->hide();
+        break;
+    default:
         break;
     }
 }
